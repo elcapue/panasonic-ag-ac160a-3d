@@ -606,12 +606,13 @@ function buildBtn(e, g) {
   return { press: () => pulse(cap, 'position', 'z', -0.13) };
 }
 function buildRBtn(e, g) {
-  const w = e.w ?? 0.95, h = 0.5;
+  const w = e.w ?? 0.95, h = e.h ?? 0.5;
   const bez = rbox(w + 0.16, h + 0.16, 0.08, 0.05, MAT.bodyDark.clone());
   const cap = rbox(w, h, 0.34, 0.12, mk.btn(0x34373c));
   cap.position.z = 0.1;
   g.add(bez, cap);
-  labelAbove(e, g, h / 2 + 0.36, e.face === 'B' ? 0.16 : 0.18);
+  if (e.capText) { const t = textMesh(e.capText, 0.13, { color: '#8a9098', weight: 700 }); t.position.z = 0.18; cap.add(t); }
+  else labelAbove(e, g, h / 2 + 0.36, e.face === 'B' ? 0.16 : 0.18);
   return { press: () => pulse(cap, 'position', 'z', -0.12) };
 }
 function buildSwitch(e, g) {
@@ -1050,12 +1051,23 @@ function buildBody() {
   plate('LS', -5.0, -2.35, 0.62, 1.98, mk.std(0x0f1012, 0.8), 0.16, 0.05);
   for (const a of [-1.75, 7.05]) plate('LS', a - 0.02, a + 0.02, 0.35, 2.75, MAT.hole, 0.14, 0.005);
   // clear cover over the audio level knobs
-  const clear = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, roughness: 0.05, clearcoat: 1, depthWrite: false });
+  const clear = new THREE.MeshPhysicalMaterial({ color: 0x9aa0a6, transparent: true, opacity: 0.08, roughness: 0.12, clearcoat: 0.4, depthWrite: false });
   clear.userData.noHL = true;
   const cc = onFace('LS', 9.3, 1.3); const ccm = rbox(4.4, 1.9, 0.75, 0.2, clear); ccm.position.z = 0.38; ccm.userData.noPick = true; cc.add(ccm);
   // vents (right rear, VF base)
-  for (let i = 0; i < 9; i++) { const s = onFace('R', 10.7, 1.9 + i * 0.46); s.add(rbox(5.2, 0.2, 0.05, 0.05, MAT.hole)); }
-  for (let i = 0; i < 7; i++) { const s = onFace('VR', 10.9 + i * 0.12, 11.7 + i * 0.52); s.add(rbox(3.0 - i * 0.12, 0.26, 0.06, 0.08, MAT.hole)); }
+  for (let i = 0; i < 11; i++) { const s = onFace('R', 12.2, 1.35 + i * 0.47); s.add(rbox(3.4, 0.22, 0.05, 0.05, MAT.hole)); }
+  // post vents: recessed frame leaning with the post (a parallelogram), eight horizontal slots
+  {
+    const zc = (y) => 10.7 - 0.46 * (y - 12.0), y0 = 11.8, y1 = 16.2, hl = 1.2;
+    const vs = new THREE.Shape();
+    vs.moveTo(zc(y0) - hl, y0); vs.lineTo(zc(y0) + hl, y0); vs.lineTo(zc(y1) + hl, y1); vs.lineTo(zc(y1) - hl, y1); vs.closePath();
+    cam.add(sideSolid(vs, 1.2, 1.51, mk.std(0x060607, 1), 0.02));
+    // louvre fins in body colour across the dark opening
+    for (let i = 0; i <= 8; i++) {
+      const y = y0 + 0.02 + i * ((y1 - y0 - 0.04) / 8), h = i === 0 || i === 8 ? 0.2 : 0.26, fin = rbox(0.14, h, 2 * hl + 0.1, 0.05, MAT.body);
+      fin.position.set(1.47, y, zc(y)); cam.add(fin);
+    }
+  }
   // top of handle: raised accessory plate with 1/4" (centre) and 3/8" holes
   const hp = onFace('HBT', 3.6, -0.3); hp.add(rbox(2.1, 7.2, 0.14, 0.9, mk.std(0x202226, 0.7), 4));
   for (const d of [-2.3, 0, 2.3]) { const h = zAxisCyl(d === 0 ? 0.3 : 0.2, 0.15, MAT.hole, 20); h.position.y = d; hp.add(h); }
@@ -1111,7 +1123,7 @@ customs.lens = () => {
   glassMat.userData.baseEm = glassMat.emissive.clone(); glassMat.userData.baseEI = 1;
 
   const ring = (id, r, z0, z1, tex) => {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: tex, bumpMap: tex, bumpScale: 3 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: tex, bumpMap: tex, bumpScale: tex ? 3 : 0 });
     const m = cylZ(r, z0, z1, mat, 96);
     L.add(m);
     const zc = (z0 + z1) / 2;
@@ -1129,12 +1141,30 @@ customs.lens = () => {
     t.position.set(n.x * (r + 0.02), n.y * (r + 0.02), z);
     parent.add(t);
   };
+  // raised rubber ribs as real geometry: a toothed cross-section extruded along the lens axis, child of the ring so it turns with it
+  const ribs = (parent, r0, r1, n, duty, z0, z1, mat) => {
+    const sh = new THREE.Shape(), arc = (r, a0, a1, k = 3) => { for (let j = 0; j <= k; j++) { const a = a0 + (a1 - a0) * j / k; sh.lineTo(Math.cos(a) * r, Math.sin(a) * r); } };
+    sh.moveTo(r0, 0);
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * PI * 2, a1 = a0 + (duty / n) * PI * 2, a2 = ((i + 1) / n) * PI * 2;
+      arc(r1, a0 + 0.004, a1 - 0.004, 2); arc(r0, a1, a2, 2);
+    }
+    const len = Math.abs(z1 - z0), bev = Math.min(0.06, len / 4);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: len - 2 * bev, bevelEnabled: true, bevelThickness: bev, bevelSize: 0.03, bevelOffset: -0.03, bevelSegments: 2, curveSegments: 1 });
+    geo.translate(0, 0, Math.min(z0, z1) + bev - (parent.position.z));
+    const m = new THREE.Mesh(geo, mat); parent.add(m); return m;
+  };
+  const rubber = mk.std(0x131416, 0.82, 0.02);
   ring('irisRing', 4.4, -10.25, -10.95, knurl(220, '#34363b', '#141518'));
-  const zr = ring('zoomRing', 4.55, -11.6, -13.1, knurl(70, '#26282c', '#101113'));
-  ring('focusRing', 4.68, -14.05, -16.1, knurl(48, '#1c1d20', '#0a0a0b'));
+  const zr = ring('zoomRing', 4.55, -11.6, -13.1, null);
+  zr.material.color.setHex(0x1a1b1e);
+  ribs(zr, 4.5, 4.7, 90, 0.45, -11.62, -12.05, rubber);                 // short grip teeth behind the focal-length scale
+  const fr0 = ring('focusRing', 4.6, -14.05, -16.1, null);
+  fr0.material.color.setHex(0x151618);
+  ribs(fr0, 4.55, 4.86, 56, 0.5, -14.3, -15.75, rubber);               // long rubber ribs of the focus ring
   // red line at the front of the focus ring
   const red = new THREE.Mesh(new THREE.TorusGeometry(4.66, 0.035, 8, 96), new THREE.MeshBasicMaterial({ color: 0xc0231c }));
-  red.position.set(0, LENS_Y, -16.02); L.add(red);
+  red.position.set(0, LENS_Y, -15.98); L.add(red);
   // focal-length scale on the zoom ring (rotates with it)
   // focal-length scale on the zoom ring (rotates with it): 3.9 next to the lever, 86 near the top, printed along the ring
   barrelPrint(zr, 4.565, -0.6, 0.35, PI * 0.73, 6.4, (c, w, h) => {
@@ -1194,10 +1224,21 @@ customs.lcd = () => {
   const bezel = new THREE.Mesh(new THREE.PlaneGeometry(10.3, 6.1), mk.std(0x0d0e10, 0.35));
   bezel.rotation.y = PI / 2; bezel.position.set(0.455, 0, 5.9);
   pivot.add(bezel);
-  const scr = new THREE.Mesh(new THREE.PlaneGeometry(9.4, 5.4), new THREE.MeshBasicMaterial({ map: scrTex, toneMapped: false }));
-  scr.rotation.y = PI / 2; scr.position.set(0.46, 0, 5.95);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(9.4, 5.1), new THREE.MeshBasicMaterial({ map: scrTex, toneMapped: false }));
+  scr.rotation.y = PI / 2; scr.position.set(0.46, 0.25, 5.95);
   scr.material.userData.noHL = true;
   pivot.add(scr);
+  // warranty / registration sticker on the bezel under the screen, as shipped
+  const stTex = canvasTex(1000, 84, (c, w, h) => {
+    c.fillStyle = '#efeeea'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#1b1b1b'; c.font = '900 76px Arial'; c.fillText('3', 8, 72);
+    c.font = '700 26px Arial'; c.fillText('year', 56, 34); c.fillText('Warranty', 56, 66);
+    c.fillStyle = '#c8161d'; c.font = 'italic 800 40px Arial'; c.fillText('Register now!', 196, 58);
+    c.fillStyle = '#333'; c.font = '400 21px Arial';
+    c.fillText('http://panasonic.biz/sav/pass_e/  (ENGLISH)', 470, 34); c.fillText('http://panasonic.biz/sav/pass_j/  (日本語)', 470, 66);
+  });
+  const sticker = new THREE.Mesh(new THREE.PlaneGeometry(5.3, 0.45), new THREE.MeshStandardMaterial({ map: stTex, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 }));
+  sticker.rotation.y = PI / 2; sticker.position.set(0.462, -2.64, 7.95); sticker.visible = false; pivot.add(sticker);
   const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 5.6, 20), MAT.bodyDark.clone());
   hinge.position.set(0.15, 0, -0.05);
   pivot.add(hinge);
@@ -1213,9 +1254,9 @@ customs.lcd = () => {
   const toggle = () => {
     const a0 = pivot.rotation.y, a1 = open ? 0 : -PI / 2;
     open = !open;
-    if (open) scr.visible = true;
+    if (open) scr.visible = sticker.visible = true;
     refreshCard();
-    return tween(650, (t) => { pivot.rotation.y = a0 + (a1 - a0) * t; }).then(() => { if (!open) scr.visible = false; dirty = true; });
+    return tween(650, (t) => { pivot.rotation.y = a0 + (a1 - a0) * t; }).then(() => { if (!open) scr.visible = sticker.visible = false; dirty = true; });
   };
   register('lcd', pivot, {
     anchor: () => scr.getWorldPosition(V()),
@@ -1342,21 +1383,77 @@ customs.vf = () => {
   shadowy(g); shadowy(dg);
 };
 
+// the grip side is curved, so the slots are placed by casting onto it once the grip exists (customs.grip calls this)
+let speakerG = null;
+function placeSpeakerSlots(grip) {
+  const rc = new THREE.Raycaster();
+  for (let i = 0; i < 4; i++) {
+    const z = -6.15 + i * 1.02, y = 9.3 - i * 0.05;
+    rc.set(V(14, y, z), V(-1, 0, 0));
+    const hit = rc.intersectObject(grip)[0]; if (!hit) continue;
+    const n = hit.face.normal.clone().transformDirection(grip.matrixWorld);
+    const sl = rbox(0.1, 0.27, 0.78, 0.1, MAT.hole);
+    sl.position.copy(hit.point).addScaledVector(n, 0.02);
+    sl.quaternion.setFromUnitVectors(V(1, 0, 0), n);
+    speakerG.add(sl);
+  }
+}
 customs.speaker = () => {
-  const g = new THREE.Group(); cam.add(g);
-  for (let i = 0; i < 4; i++) { const f = onFace('GRS', -6.1 + i * 1.0, 9.35, new THREE.Group(), g); f.add(rbox(0.72, 0.26, 0.08, 0.1, MAT.hole)); }
+  const g = new THREE.Group(); cam.add(g); speakerG = g;
   register('speaker', g, { anchor: () => V(8.9, 9.35, -4.6), normal: () => V(1, 0.3, 0).normalize() });
 };
 
+// a decal that hugs a curved +X-facing surface: grid rays cast along -X, texture u runs rear → front (as seen from the right)
+function conformPatch(target, z0, z1, y0, y1, tex, nz = 48, ny = 24, lift = 0.025) {
+  const rc = new THREE.Raycaster(), pos = [], uv = [], idx = [], ok = [];
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nz; i++) {
+    const z = z1 - (i / nz) * (z1 - z0), y = y1 - (j / ny) * (y1 - y0);
+    rc.set(V(20, y, z), V(-1, 0, 0));
+    const hit = rc.intersectObject(target)[0];
+    if (hit) { const n = hit.face.normal.clone().transformDirection(target.matrixWorld); pos.push(...hit.point.clone().addScaledVector(n, lift).toArray()); } else pos.push(0, y, z);
+    ok.push(!!hit); uv.push(i / nz, 1 - j / ny);
+  }
+  const W = nz + 1;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nz; i++) {
+    const a = j * W + i, b = a + 1, c = a + W, d = c + 1;
+    if (ok[a] && ok[b] && ok[c] && ok[d]) idx.push(a, c, b, b, c, d);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.3, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -2 }));
+  m.userData.noPick = true;
+  return m;
+}
+// knurled thumb pad under the speaker: diamond knurl inside a rounded outline (z -7.3…-1.6, y 6.0…8.9)
+function gripKnurlTex() {
+  const PX = 200, z1 = -1.6, y1 = 8.9, X = (z) => (z1 - z) * PX, Y = (y) => (y1 - y) * PX;
+  return canvasTex(Math.round(5.7 * PX), Math.round(2.9 * PX), (c, w, h) => {
+    const path = () => {
+      c.beginPath(); c.moveTo(X(-2.1), Y(6.0)); c.lineTo(X(-2.1), Y(7.95)); c.quadraticCurveTo(X(-2.1), Y(8.6), X(-2.85), Y(8.6));
+      c.lineTo(X(-5.7), Y(8.6)); c.bezierCurveTo(X(-6.6), Y(8.6), X(-6.2), Y(7.2), X(-7.1), Y(6.0)); c.closePath();
+    };
+    c.save(); path(); c.clip();
+    c.fillStyle = '#18191c'; c.fillRect(0, 0, w, h);
+    const st = 22; c.lineWidth = 5;
+    for (let k = -h; k < w + h; k += st) {
+      c.strokeStyle = '#0b0c0e'; c.beginPath(); c.moveTo(k, 0); c.lineTo(k + h, h); c.stroke(); c.beginPath(); c.moveTo(k, h); c.lineTo(k + h, 0); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.05)'; c.lineWidth = 2; c.beginPath(); c.moveTo(k + 4, 0); c.lineTo(k + 4 + h, h); c.stroke(); c.lineWidth = 5;
+    }
+    c.restore();
+    path(); c.strokeStyle = '#2d2f34'; c.lineWidth = 7; c.stroke();
+  });
+}
 customs.grip = () => {
   const g = new THREE.Group(); cam.add(g);
   // rounded, bulging hand grip; its rear face carries POWER, its top the W/T rocker and REC CHECK
-  g.add(new THREE.Mesh(loftZ([
+  const gripBody = new THREE.Mesh(loftZ([
     { z: -10.3, w: 2.2, h: 7.4, r: 1.0, cx: 5.8, cy: 6.0 }, { z: -9.8, w: 3.2, h: 8.9, r: 1.5, cx: 6.0, cy: 6.0 },
     { z: -8.9, w: 4.0, h: 10.0, r: 1.9, cx: 6.3, cy: 6.0 }, { z: -7.0, w: 4.5, h: 10.8, r: 2.2, cx: 6.55, cy: 6.0 },
     { z: -3.0, w: 4.7, h: 11.2, r: 2.3, cx: 6.62, cy: 6.0 }, { z: 1.0, w: 4.6, h: 11.2, r: 2.2, cx: 6.6, cy: 6.05 },
     { z: 3.4, w: 4.3, h: 10.8, r: 1.9, cx: 6.45, cy: 6.15 }, { z: 4.0, w: 3.95, h: 10.35, r: 1.7, cx: 6.3, cy: 6.25 }, { z: 4.3, w: 3.3, h: 9.6, r: 1.35, cx: 6.3, cy: 6.3 },
-  ], { caps: [true, true], seg: 10 }), MAT.body.clone()));
+  ], { caps: [true, true], seg: 10 }), MAT.body.clone());
+  g.add(gripBody);
   // front fin next to the lens, with the strap anchor hole
   const fin = new THREE.Mesh(pillow(5.3, 7.75, 1.9, 11.0, -10.75, -9.35, 0.8, 0.45, 0.35), MAT.body.clone()); g.add(fin);
   const hole = zAxisCyl(0.2, 0.1, MAT.hole, 16); hole.rotation.y = PI / 2; hole.position.set(7.86, 7.6, -9.9); g.add(hole);
@@ -1365,7 +1462,9 @@ customs.grip = () => {
   // recessed rear panel (POWER, CAMERA/PB lamps)
   const back = rbox(2.9, 4.8, 0.2, 0.5, mk.std(0x131416, 0.75)); back.position.set(6.35, 7.9, 4.28); g.add(back);
   // textured finger area
-  const tex = rbox(0.1, 2.0, 4.6, 0.5, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, map: dots(26, '#1e1f22', '#101113') })); tex.position.set(8.9, 6.9, -5.4); tex.rotation.x = 0.12; g.add(tex);
+  gripBody.updateMatrixWorld(true);
+  g.add(conformPatch(gripBody, -7.3, -1.6, 6.0, 8.9, gripKnurlTex()));
+  if (speakerG) placeSpeakerSlots(gripBody);
   // hand strap: band from the front bottom up to the rear top, padded middle with the logo
   const bandPath = new THREE.CatmullRomCurve3([V(8.2, 4.0, -9.6), V(9.4, 4.3, -8.3), V(10.45, 5.1, -4.6), V(10.4, 6.3, -0.8), V(9.6, 7.3, 2.2), V(8.7, 7.7, 3.7)]);
   g.add(new THREE.Mesh(sweep(bandPath, (t) => [1.5, 0.12], 60), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, map: knurl(60, '#141517', '#0c0d0f') })));
@@ -1516,18 +1615,25 @@ customs.cardDoor = () => {
 };
 
 customs.battery = () => {
-  const bay = onFace('B', 3.15, 5.4); bay.add(rbox(3.9, 9.3, 0.12, 0.3, MAT.hole));
+  // open pocket: dark back wall, C-shaped frame (top, right, bottom) standing proud of the rear, open towards the port covers
+  const bay = onFace('B', 3.0, 4.35); bay.add(rbox(3.7, 7.6, 0.12, 0.3, MAT.hole));
+  const fs = new THREE.Shape();
+  fs.moveTo(1.2, 8.75); fs.lineTo(4.4, 8.75); fs.quadraticCurveTo(5.5, 8.75, 5.5, 7.65); fs.lineTo(5.5, 1.3); fs.quadraticCurveTo(5.5, 0.2, 4.4, 0.2);
+  fs.lineTo(1.2, 0.2); fs.lineTo(1.2, 0.8); fs.lineTo(4.45, 0.8); fs.quadraticCurveTo(4.85, 0.8, 4.85, 1.2); fs.lineTo(4.85, 7.75);
+  fs.quadraticCurveTo(4.85, 8.15, 4.45, 8.15); fs.lineTo(1.2, 8.15); fs.closePath();
+  const fg = new THREE.ExtrudeGeometry(fs, { depth: 0.95, bevelEnabled: true, bevelThickness: 0.14, bevelSize: 0.12, bevelSegments: 3, curveSegments: 10 });
+  const frame = new THREE.Mesh(fg, MAT.body); frame.position.z = 14.2; cam.add(frame);
   const g = new THREE.Group(); cam.add(g);
-  // sits in its bay, the back stands ~0.5 proud of the housing
-  const b = rbox(3.4, 8.8, 3.4, 0.4, mk.std(0x2a2c30, 0.5, 0.05), 3); b.position.set(3.15, 5.4, 13.3);
-  const face = rbox(2.5, 7.4, 0.1, 0.25, mk.std(0x34373c, 0.45)); face.position.set(3.15, 5.2, 15.02);
+  // shorter than the pocket: a strip of the dark bay (with PUSH) shows above it; the back stands ~0.8 proud of the frame
+  const b = rbox(3.4, 6.3, 3.4, 0.4, mk.std(0x3a3c40, 0.5, 0.08), 3); b.position.set(3.0, 3.95, 14.4);
+  const face = rbox(2.4, 5.0, 0.1, 0.25, mk.std(0x46494e, 0.45)); face.position.set(3.0, 3.85, 16.12);
   g.add(b, face);
-  const tf = new THREE.Group(); tf.position.set(3.15, 5.4, 15.09); g.add(tf);
-  const t1 = textMesh('Li-ion  BATTERY PACK', 0.2, { color: '#8c939c', weight: 700 }); t1.rotation.z = PI / 2; t1.position.x = 0.2; tf.add(t1);
-  const ar = textMesh('▼', 0.34, { color: '#9aa1ab' }); ar.position.set(0, -2.9, 0); tf.add(ar);
+  const tf = new THREE.Group(); tf.position.set(3.0, 3.95, 16.19); g.add(tf);
+  const t1 = textMesh('Li-ion  BATTERY PACK', 0.2, { color: '#9aa1ab', weight: 700 }); t1.rotation.z = PI / 2; t1.position.set(0.15, 0.3, 0); tf.add(t1);
+  const ar = textMesh('▼', 0.34, { color: '#aab0b8' }); ar.position.set(0, -2.05, 0); tf.add(ar);
   let out = false;
   register('battery', g, {
-    anchor: () => V(3.15, 5.4, 15.1 + (out ? 3 : 0)), normal: () => V(0.35, 0.3, 1).normalize(),
+    anchor: () => V(3.0, 4.0, 16.2 + (out ? 4 : 0)), normal: () => V(0.35, 0.3, 1).normalize(),
     press: () => { const z0 = g.position.z, z1 = out ? 0 : 4; out = !out; refreshCard(); return tween(500, (t) => { g.position.z = z0 + (z1 - z0) * t; }); },
     actionLabel: () => (out ? 'Вставить аккумулятор' : 'Снять аккумулятор'),
   });
@@ -1536,11 +1642,16 @@ customs.battery = () => {
 
 customs.tripod = () => {
   const f = onFace('D', 2, 0);
-  const p = rbox(3.2, 5.0, 0.4, 0.3, mk.std(0x18191b, 0.8)); p.position.z = 0.2; f.add(p);
-  // 3/8" and 1/4" sockets and the anti-twist pin hole in a row, metal-lined
+  // the whole underside is one screwed-on plate (face-local X = −world X, Y = −world Z + 2)
+  const bp = rbox(7.8, 19.4, 0.16, 0.08, mk.std(0x1c1d20, 0.8, 0.05)); bp.position.set(0.2, -1.5, 0.06); f.add(bp);
+  for (const [x, y] of [[3.7, 7.7], [-3.3, 7.7], [3.7, 2.2], [-3.3, 2.2], [3.7, -4.0], [-3.3, -4.0], [3.7, -10.8], [-3.3, -10.8], [0.2, -10.9], [0.2, 7.8]]) {
+    const sc = zAxisCyl(0.13, 0.17, MAT.darkMetal, 12); sc.position.set(x, y, 0); f.add(sc);
+    const sl = rbox(0.18, 0.03, 0.02, 0.01, MAT.hole); sl.position.set(x, y, 0.175); sl.rotation.z = 0.6; f.add(sl);
+  }
+  // 3/8" and 1/4" sockets and the anti-twist pin hole in a row, metal-lined, flush with the plate
   for (const [y, r] of [[1.35, 0.42], [0, 0.3], [-1.2, 0.2]]) {
-    const ring = zAxisCyl(r + 0.12, 0.44, mk.metal(), 28); ring.position.y = y; f.add(ring);
-    const h = zAxisCyl(r, 0.46, MAT.hole, 24); h.position.y = y; f.add(h);
+    const ring = zAxisCyl(r + 0.13, 0.17, mk.metal(), 28); ring.position.y = y; f.add(ring);
+    const h = zAxisCyl(r, 0.18, MAT.hole, 24); h.position.y = y; f.add(h);
   }
   // regulatory sticker
   const st = canvasTex(256, 384, (c, w, h) => {
@@ -1550,7 +1661,7 @@ customs.tripod = () => {
     c.strokeStyle = '#9aa0a8'; c.lineWidth = 3; c.strokeRect(190, 20, 50, 50); c.beginPath(); c.arc(215, 110, 22, 0, PI * 2); c.stroke();
   });
   const stm = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 3.0), new THREE.MeshStandardMaterial({ map: st, roughness: 0.6 }));
-  stm.position.set(2.6, -5.2, 0.01); f.add(stm);
+  stm.position.set(2.2, -5.6, 0.15); f.add(stm);
   register('tripod', f, { anchor: () => f.localToWorld(V(0, 0, 0.5)), normal: () => V(-0.35, -1, -0.25).normalize() });
   shadowy(f);
 };
