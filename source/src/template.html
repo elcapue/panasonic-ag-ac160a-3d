@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AG-AC160A в 3D</title>
+<style>
+:root {
+  --bg: #0e1116; --bg2: #151a21; --panel: rgba(20, 25, 32, .86); --line: rgba(255,255,255,.08);
+  --text: #e7ebf0; --muted: #8e98a6; --accent: #4f8cff; --accent2: #f0a52a; --chip: #232a34;
+  --shadow: 0 10px 40px rgba(0,0,0,.45);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; }
+#app { display: grid; grid-template-columns: 1fr 340px; height: 100vh; height: 100dvh; }
+#stage { position: relative; overflow: hidden;
+  background: radial-gradient(120% 90% at 40% 35%, #2a313c 0%, #161b22 55%, #0c0f13 100%); }
+#stage canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+#stage canvas:active { cursor: grabbing; }
+
+.hud-title { position: absolute; left: 20px; top: 16px; pointer-events: none; }
+.hud-title h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+.hud-title p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+.toolbar { position: absolute; left: 0; right: 0; margin: 0 auto; width: max-content; bottom: 18px; display: flex; gap: 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px; backdrop-filter: blur(10px);
+  box-shadow: var(--shadow); flex-wrap: wrap; justify-content: center; max-width: calc(100% - 24px); }
+.toolbar button { background: transparent; border: 0; border-radius: 9px; padding: 7px 11px; color: #cfd6df; font-size: 13px; white-space: nowrap; }
+.toolbar button:hover { background: rgba(255,255,255,.07); }
+.toolbar button.on { background: var(--accent); color: #fff; }
+.toolbar .sep { width: 1px; background: var(--line); margin: 4px 2px; }
+.toolbar .rec { color: #ff6b62; font-weight: 600; }
+
+#tip { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .12s;
+  background: rgba(10,13,18,.92); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; z-index: 20; }
+#tip.on { opacity: 1; }
+#tip b { display: block; font-weight: 600; font-size: 13px; }
+#tip span { color: var(--accent2); font-size: 11.5px; letter-spacing: .4px; }
+
+#markers { position: absolute; inset: 0; pointer-events: none; }
+.mk { position: absolute; left: 0; top: 0; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px;
+  border: 1.5px solid rgba(255,255,255,.85); background: rgba(20,26,34,.82); color: #fff; font-size: 11px; font-weight: 700;
+  line-height: 19px; text-align: center; pointer-events: auto; display: none; }
+.mk:hover { background: var(--accent); }
+.mk.sel { background: var(--accent); border-color: #fff; box-shadow: 0 0 0 4px rgba(79,140,255,.35); }
+
+#card { position: absolute; left: 18px; top: 74px; width: 390px; max-width: calc(100% - 36px); max-height: calc(100% - 160px);
+  overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 12px;
+  backdrop-filter: blur(12px); box-shadow: var(--shadow); transform: translateY(8px); opacity: 0; pointer-events: none;
+  transition: opacity .18s, transform .18s; }
+#card.on { opacity: 1; transform: none; pointer-events: auto; }
+.c-head { display: flex; align-items: center; gap: 8px; }
+.c-num { background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; border-radius: 10px; padding: 1px 8px; }
+.c-label { font-family: "Consolas", ui-monospace, monospace; font-size: 12px; color: var(--accent2); letter-spacing: .5px;
+  background: rgba(240,165,42,.1); border-radius: 6px; padding: 2px 7px; }
+.c-x { margin-left: auto; background: transparent; border: 0; color: var(--muted); font-size: 16px; padding: 2px 6px; border-radius: 6px; }
+.c-x:hover { background: rgba(255,255,255,.08); color: #fff; }
+#card h2 { margin: 10px 0 2px; font-size: 19px; font-weight: 650; }
+.c-zone { color: var(--muted); font-size: 12px; }
+#card p { margin: 10px 0 12px; color: #d3d9e1; }
+.c-pos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.c-pos button { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 12.5px; }
+.c-pos button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.c-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.c-act { background: #e9edf2; color: #10141a; border: 0; border-radius: 9px; padding: 7px 14px; font-weight: 600; }
+.c-act:hover { background: #fff; }
+.c-ref { color: var(--muted); font-size: 12px; }
+.c-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.c-nav button { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; width: 34px; height: 28px; }
+.c-nav button:hover { background: #2d3542; }
+
+aside { background: var(--bg2); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.side-head { padding: 16px 16px 10px; }
+.side-head h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .8px; }
+#search { width: 100%; background: #0f1318; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; color: var(--text); font: inherit; outline: none; }
+#search:focus { border-color: var(--accent); }
+#list { overflow: auto; padding: 0 8px 16px; flex: 1; }
+.zone { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; padding: 14px 10px 6px; font-weight: 600; }
+.item { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; background: transparent; border: 0;
+  padding: 7px 10px; border-radius: 9px; }
+.item:hover { background: rgba(255,255,255,.05); }
+.item.active { background: rgba(79,140,255,.16); }
+.item .n { flex: none; min-width: 24px; height: 20px; border-radius: 10px; background: var(--chip); color: #b9c2ce; font-size: 11px;
+  font-weight: 700; text-align: center; line-height: 20px; margin-top: 1px; }
+.item.active .n { background: var(--accent); color: #fff; }
+.item .t { display: flex; flex-direction: column; }
+.item .ru { font-size: 13.5px; }
+.item .lb { font-family: "Consolas", ui-monospace, monospace; font-size: 11px; color: var(--accent2); opacity: .85; }
+.side-foot { padding: 10px 16px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
+#btn-side { display: none; }
+
+@media (max-width: 900px) {
+  #app { grid-template-columns: 1fr; }
+  aside { position: fixed; right: 0; top: 0; bottom: 0; width: min(360px, 92vw); z-index: 30; transform: translateX(100%);
+    transition: transform .22s; box-shadow: var(--shadow); }
+  body.side-open aside { transform: none; }
+  #btn-side { display: inline-block; }
+  #card { top: auto; bottom: 86px; left: 12px; right: 12px; width: auto; max-height: 46%; }
+  .hud-title h1 { font-size: 16px; }
+  .hud-title p { display: none; }
+  .toolbar { bottom: 12px; }
+  .toolbar .opt { display: none; }
+}
+body:not(.ready) #stage::after { content: 'Загрузка 3D…'; position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="markers"></div>
+    <div class="hud-title">
+      <h1>Panasonic AG-AC160A</h1>
+      <p>Мышь или WASD / стрелки — вращение, колесо или Q / E — зум, правая кнопка или Shift + WASD — сдвиг. Клик по элементу — описание и действие.</p>
+    </div>
+    <div id="card"></div>
+    <div class="toolbar">
+      <button data-view="home" title="Общий вид">3/4</button>
+      <button data-view="left" class="opt">Слева</button>
+      <button data-view="right" class="opt">Справа</button>
+      <button data-view="front" class="opt">Спереди</button>
+      <button data-view="rear" class="opt">Сзади</button>
+      <button data-view="top" class="opt">Сверху</button>
+      <button data-view="bottom" class="opt">Снизу</button>
+      <span class="sep"></span>
+      <button id="btn-markers">Номера</button>
+      <button id="btn-tour">Экскурсия</button>
+      <button id="btn-lcd" class="opt">Экран</button>
+      <button id="btn-rec" class="rec">● REC</button>
+      <button id="btn-side">Список</button>
+    </div>
+  </div>
+  <aside>
+    <div class="side-head">
+      <h3>Органы управления</h3>
+      <input id="search" type="search" placeholder="Поиск: зум, звук, ND…" autocomplete="off">
+    </div>
+    <div id="list"></div>
+    <div class="side-foot">По инструкции AG-AC160A (Vol.1 / Vol.2) и фото камеры. [ ] — листать, Esc — закрыть.</div>
+  </aside>
+</div>
+<div id="tip"></div>
+<script>/*__BUNDLE__*/</script>
+</body>
+</html>
